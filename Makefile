@@ -50,7 +50,7 @@ SDCCFLAGS=-S -mpic14 -p$(PIC) --use-non-free -D__$(PIC)
 SUFFIXES :=
 .c.o:
 
-.PHONY: all clean run dist
+.PHONY: all clean run dist crun test
 
 .PRECIOUS: %.asm
 
@@ -63,6 +63,9 @@ clean:
 
 run: $(HEX)
 	@$(GPSIM) -c env.conf -s $(COD)
+
+crun: $(HEX)
+	@$(GPSIM) --cli -c env.conf -s $(COD)
 
 $(HEX): $(OBJFILES)
 	@$(GPLINK) $(GPLDFLAGS) -o $@ $^
@@ -79,3 +82,9 @@ $(DIST): $(HEX)
 upload:
 	k14 p $(HEX)
 	k14 v $(HEX)
+
+mt: main.c
+	@gcc -DTEST main.c -o mt
+
+test: mt
+	@./mt

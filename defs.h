@@ -31,7 +31,7 @@ SOFTWARE.
 #ifdef __16f627a
 #include "pic16f627a.h"
 #else
-#error UNKOWN PIC
+//#error UNKOWN PIC
 #endif
 #endif
 
