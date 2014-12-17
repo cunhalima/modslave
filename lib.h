@@ -25,6 +25,8 @@ SOFTWARE.
 #ifndef _INC_LIB_H_
 #define _INC_LIB_H_
 
+#if 0
+
 #define USART_TX_INT_ON   0xff
 #define USART_TX_INT_OFF  0x7f
 
@@ -54,6 +56,7 @@ unsigned char usart_getc(void);
 unsigned char usart_busy(void);
 unsigned char usart_drdy(void);
 
+#endif
 unsigned char usart_wait_and_read(void);
 void usart_wait_and_write(unsigned char);
 

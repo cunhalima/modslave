@@ -26,6 +26,7 @@ SOFTWARE.
 // Luz: Ligar/desligar (1 bit)
 // Dimmer: Nada,Aumenta 5%,Diminui 5% (2 bits)
 // Sensor de temperatura (8 bits)
+// j
 
 #include "defs.h"
 
@@ -70,6 +71,7 @@ void main(void) {
 #endif
 
 //#include <pic/pic16f627a.h>
+#include <pic16/usart.h>
 
 #define GPSIM_20Mhz_2400baud_BRGHlow 0x81
 #define GPSIM_20Mhz_9600baud_BRGHlow 0x20
@@ -120,7 +122,9 @@ unsigned char hex[] = {
 int TRISA=0;
 int PORTA=0;
 
-Uint8 simulacao[] = { 0x11, 0x02, 0x00, 0xC4, 0x00, 0x16, 0xBA, 0xA9 };
+//Uint8 simulacao[] = { 0x11, 0x02, 0x00, 0xC4, 0x00, 0x16, 0xBA, 0xA9 };
+//Uint8 simulacao[] = { 0x11, 0x03, 0x00, 0x6B, 0x00, 0x05, 0x76, 0x87 };
+Uint8 simulacao[] = { 0x11, 0x06, 0x00, 0x01, 0x00, 0x03, 0x9A, 0x9B };
 int pos = 0;
 
 void usart_open(int a, int b) {
@@ -133,144 +137,198 @@ Uint8 usart_wait_and_read(void) {
     return simulacao[pos++];
 }
 
-void usart_wait_and_write(char c) {
-    printf("%c", c);
+void usart_wait_and_write(Uint8 c) {
+    printf("%02X\n", c);
 }
 
 #endif
 
 #define SLAVE_ADDR              0x01
-
 #define READ_INPUT_STATUS       0x02
+#define READ_HOLDING_REGISTERS  0x03
+#define PRESET_SINGLE_REGISTER  0x06
 
+#define NUM_REGS    6
 
+#define LAMP1   0
+#define LAMP2   1
+#define LUMIN   2
+#define TEMP    3
+#define CORT    4
 
-Uint16 CRC16;
-#define SEED 0xFFFF  //initialization for CRC16
-//#define GP   0xA001  //generating polynomial
-#define GP   0x8005  //generating polynomial
-//for standard CRC16
-//(remainder of division)
-//to start a new CRC, set CRC16 = SEED
-//then for each byte call Calc_CRC(byte, &CRC16);
-//CRC16 will contain the result
-//(if you calculate all of the incoming data
-//INCLUDING the CRC, the result should be 0x0000
-//and if you are sending the CRC be sure to
-//send the bytes in the correct order)
-void Calc_CRC(Uint8 b, Uint16* CRC)
-{
-   int carry;
-   int i;
-   CRC[0] ^= b & 0xFF;
-   for (i=0; i<8; i++)
-   {
-      carry = CRC[0] & 0x0001;
-      CRC[0]>>=1;
-      if (carry) CRC[0] ^= GP;
-   }
+/*
+ * Lampada1 = 0
+ * Lampada2 = 1
+ * LumL1 = 2
+ * Temp = 3
+ * Cortina = 4
+ */
+
+Uint16 crc;
+Uint16 regs[NUM_REGS];
+
+Uint16 swap16(Uint16 x) {
+    return (x >> 8) | (x << 8);
 }
 
-Uint8 rec[1024];
-int recpos = 0;
+void calc_CRC(Uint8 x) {
+    int i;
+    crc ^= (Uint16)x;
+    for (i = 8; i != 0; i--) {
+        if (crc & 1) {
+            crc >>= 1;
+            crc ^= 0xA001;
+        } else {
+            crc >>= 1;
+        }
+    }
+}
+
+void write8(Uint8 x) {
+    calc_CRC(x);
+    //printf("devolvendo: %02X\n", x);
+    usart_wait_and_write(x);
+}
+
+void write16(Uint16 x) {
+    write8(x >> 8);
+    write8(x & 0xFF);
+}
 
 Uint8 read8(void) {
     Uint8 x = usart_wait_and_read();
-    rec[recpos++] = x;
+    calc_CRC(x);
     return x;
 }
 
 Uint16 read16(void) {
     Uint16 x;
     x = read8();
-    x = (x << 8) | (read8() & 0xFF);
+    x = (x << 8) | read8();
     return x;
 }
 
-Uint16 read16_le(void) {
-    Uint16 x;
-    x = read8();
-    x = x | (read8() << 8);
-    return x;
+void packet_start(void) {
+    crc = 0xFFFF;
 }
 
-
-// Compute the MODBUS RTU CRC
-Uint16 ModRTU_CRC(Uint8 *buf, int len)
-{
-  Uint16 crc = 0xFFFF;
-    int pos, i;
- 
-  for (pos = 0; pos < len; pos++) {
-    crc ^= (Uint16)buf[pos];          // XOR byte into least sig. byte of crc
- 
-    for (i = 8; i != 0; i--) {    // Loop over each bit
-      if ((crc & 0x0001) != 0) {      // If the LSB is set
-        crc >>= 1;                    // Shift right and XOR 0xA001
-        crc ^= 0xA001;
-      }
-      else                            // Else LSB is not set
-        crc >>= 1;                    // Just shift right
+void packet_end(void) {
+    Uint16 readcrc;
+    Uint16 bkcrc = crc;
+    bkcrc = swap16(bkcrc);
+    readcrc = read16();
+    if (readcrc != bkcrc) {
+        //printf("CRC ERROR: read %04X expect %04X\n", readcrc, bkcrc);
     }
-  }
-  // Note, this number has low and high bytes swapped, so use it accordingly (or swap bytes)
-  return crc;  
 }
 
-Uint16 read_crc(void) {
-    Uint16 crc_enviado;
-    Uint16 crc_calculado;
-    crc_calculado = ModRTU_CRC(rec, recpos);
-    crc_enviado = read16_le();
-    if (crc_calculado == crc_enviado) {
-        printf("eba\n");
-    } else {
-        printf("putz\n");
-    }
-    printf("CRC = %08X, %08X\n", crc_enviado, crc_calculado);
-    return crc_enviado;
-}
-void startREC(void) {
-    recpos = 0;
+Uint8 lerTemperatura(void) {
+    return 0;
 }
 
-void endREC(void) {
+void interruptorLampada1(Uint8 value) {
+    //printf("lamp1 %d\n", value);
+    (void)value;
+}
+
+void interruptorLampada2(Uint8 value) {
+    //printf("lamp2 %d\n", value);
+    (void)value;
+}
+
+void intensidadeLuz(Uint8 value) {
+    //printf("intensidade %d\n", value);
+    (void)value;
+}
+
+void moverCortina(Uint8 value) {
+    //printf("cortina %d\n", value);
+    (void)value;
 }
 
 void main()
 {
-    unsigned char c = 'G';
-    usart_open(USART_TX_INT_OFF & USART_RX_INT_OFF & USART_ASYNCH_MODE & USART_BRGH_LOW & USART_EIGHT_BIT, GPSIM_20Mhz_2400baud_BRGHlow);
-    TRISA = 0;
     Uint8 slave;
     Uint8 fn;
     Uint16 addr;
     Uint16 count;
+    Uint16 value;
+    usart_open(USART_TX_INT_OFF & USART_RX_INT_OFF & USART_ASYNCH_MODE & USART_BRGH_LOW & USART_EIGHT_BIT, GPSIM_20Mhz_2400baud_BRGHlow);
+    //TRISA = 0;
     for (;;) {
+        int i;
         // inicio do pacote
-        startREC();
+        packet_start();
         slave = read8();
         fn = read8();
         switch(fn) {
+            case READ_HOLDING_REGISTERS: // leitura
+                addr = read16();
+                count = read16();
+                packet_end();
+                //printf("LER DE %04X\n", addr);
+                //printf("LER %d registradores\n", count);
+                // mandar resposta
+                packet_start();
+                write8(SLAVE_ADDR);
+                write8(fn);
+                write8(count * 2);
+                for (i = 0; i < count; i++) {
+                    Uint8 r = addr + i;
+                    if (r == TEMP) {
+                        regs[r] = lerTemperatura();
+                    }
+                    write16(regs[r]);
+                }
+                write16(swap16(crc));
+                break;
+            case PRESET_SINGLE_REGISTER: // escrita
+                addr = read16();
+                value = read16();
+                packet_end();
+                //printf("GRAVAR EM %04X\n", addr);
+                //printf("GRAVAR valor %04X\n", value);
+                regs[addr] = value;
+                switch(addr) {
+                    case LAMP1:
+                        interruptorLampada1(value);
+                        break;
+                    case LAMP2:
+                        interruptorLampada2(value);
+                        break;
+                    case LUMIN:
+                        intensidadeLuz(value);
+                        break;
+                    case TEMP:
+                        break;
+                    case CORT:
+                        moverCortina(value);
+                        break;
+                }
+                // mandar resposta
+                packet_start();
+                write8(SLAVE_ADDR);
+                write8(fn);
+                write16(addr);
+                write16(value);
+                write16(swap16(crc));
+                break;
+            /*
             case READ_INPUT_STATUS:
                 addr = read16();
                 count = read16();
                 printf("LER DE %04X\n", addr);
                 printf("LER %d bits\n", count);
                 break;
+            */
             default:
-                printf("nao implementamos ainda\n");
+                //printf("nao implementamos ainda\n");
         }
-        endREC();
-        printf("LER CRC %04X\n", read_crc());
-
-        usart_wait_and_write(c);
-        usart_wait_and_write(':');
+        //printf("LER CRC %04X\n", read_crc());
+        //usart_wait_and_write(':');
         usart_wait_and_write(' ');
         usart_wait_and_write('0');
         usart_wait_and_write('x');
-        usart_wait_and_write(hex[(c & 0xf0) >> 4]);
-        usart_wait_and_write(hex[c & 0x0f]);
         usart_wait_and_write('\n');
     }
 }

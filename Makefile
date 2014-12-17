@@ -26,7 +26,7 @@
 #
 #PIC=16f628a
 #PIC=16f627a
-PIC=16f628a
+PIC=18f4550
 PRG=slave
 CFILES=main.c lib.c
 HEX=$(PRG).hex
@@ -41,10 +41,11 @@ GPASM=gpasm
 GPLINK=gplink
 GPLDFLAGS=-w -m
 GPLDFLAGS+=-s /usr/share/gputils/lkr/$(PIC).lkr
-GPLDFLAGS+=$(HOME)/sdcc/share/sdcc/non-free/lib/pic14/pic$(PIC).lib
-GPLDFLAGS+=$(HOME)/sdcc/share/sdcc/lib/pic14/libsdcc.lib
+GPLDFLAGS+=$(HOME)/sdcc/share/sdcc/non-free/lib/pic16/pic$(PIC).lib
+GPLDFLAGS+=$(HOME)/sdcc/share/sdcc/lib/pic16/libsdcc.lib
 SDCC=sdcc
-SDCCFLAGS=-S -mpic14 -p$(PIC) --use-non-free -D__$(PIC)
+#SDCCFLAGS=-S -mpic16 -p$(PIC) --use-non-free -D__$(PIC) -I/home/alex/sdcc/share/sdcc/include/pic16
+SDCCFLAGS=-S -mpic16 -p$(PIC) --use-non-free -D__$(PIC)
 
 .SUFFIXES:
 SUFFIXES :=

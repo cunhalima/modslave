@@ -27,6 +27,8 @@ SOFTWARE.
 //#include <pic/pic16f627a.h>
 #include "lib.h"
 
+#if 0
+
 void usart_open(unsigned char config, unsigned int spbrg) { /* {{{ */
   TXSTA = 0;           // Reset USART registers to POR state
   RCSTA = 0;
@@ -105,6 +107,8 @@ unsigned char usart_drdy(void) { /* {{{ */
     return RCIF;
 }
 /* }}} */
+
+#endif
 
 unsigned char usart_wait_and_read(void) { /* {{{ */
     while(!usart_drdy());
